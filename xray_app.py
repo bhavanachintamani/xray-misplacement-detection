@@ -38,20 +38,22 @@ def load_models():
 @st.cache_data
 def load_results():
     df = pd.read_csv('xray_results.csv')
-    # Rename columns if needed
     df.columns = df.columns.str.strip().str.lower().str.replace(' ','_')
     return df
 
 kmeans, iso_forest, pca, scaler = load_models()
 results_df = load_results()
 
-# Get column names safely
-has_misplaced  = 'is_misplaced' in results_df.columns
-has_cluster    = 'kmeans_cluster' in results_df.columns
-has_umap       = 'umap_x' in results_df.columns
-has_label      = 'true_label' in results_df.columns
-has_risk       = 'risk_score' in results_df.columns
-has_anomaly    = 'anomaly_score' in results_df.columns
+has_misplaced = 'is_misplaced' in results_df.columns
+has_cluster   = 'kmeans_cluster' in results_df.columns
+has_umap      = 'umap_x' in results_df.columns and 'umap_y' in results_df.columns
+has_label     = 'true_label' in results_df.columns
+has_risk      = 'risk_score' in results_df.columns
+
+total     = len(results_df)
+high_risk = int(results_df['is_misplaced'].sum()) if has_misplaced else 0
+n_clust   = int(results_df['kmeans_cluster'].nunique()) if has_cluster else 0
+rate      = f"{results_df['is_misplaced'].mean()*100:.1f}%" if has_misplaced else "0%"
 
 tab1, tab2, tab3 = st.tabs(["Upload X-Ray", "Dataset Overview", "About"])
 
@@ -65,9 +67,13 @@ with tab1:
     if uploaded_file is not None:
         file_bytes  = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         img         = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
-        img_resized = cv2.resize(img, (128, 128))
 
-        col1, col2 = st.columns(2)
+        # Get correct image size from scaler
+        n_features  = scaler.n_features_in_
+        img_size    = int(n_features ** 0.5)
+        img_resized = cv2.resize(img, (img_size, img_size))
+
+        col1, col2  = st.columns(2)
         with col1:
             st.image(img_resized, caption="Uploaded X-Ray",
                      use_column_width=True, clamp=True)
@@ -95,6 +101,7 @@ with tab1:
             st.metric("Risk Level",    risk_level)
             st.metric("Cluster",       f"Cluster {cluster}")
             st.metric("Anomaly Score", f"{anomaly_score:.4f}")
+            st.metric("Image Size",    f"{img_size}x{img_size}")
 
             if is_anomaly:
                 st.error("⚠️ MISPLACEMENT DETECTED — Recommend radiologist review.")
@@ -104,15 +111,10 @@ with tab1:
 with tab2:
     st.subheader("Dataset Analysis Overview")
 
-    total      = len(results_df)
-    high_risk  = int(results_df['is_misplaced'].sum()) if has_misplaced else 0
-    n_clusters = int(results_df['kmeans_cluster'].nunique()) if has_cluster else 0
-    rate       = f"{results_df['is_misplaced'].mean()*100:.1f}%" if has_misplaced else "0%"
-
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Images",   total)
     col2.metric("High Risk",      high_risk)
-    col3.metric("Clusters Found", n_clusters)
+    col3.metric("Clusters Found", n_clust)
     col4.metric("Anomaly Rate",   rate)
 
     st.markdown("---")
@@ -171,8 +173,8 @@ with tab3:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-        **Problem:** Misplaced X-rays in hospital systems cause diagnostic errors
-        and delays. Manual review of thousands of images is not feasible.
+        **Problem:** Misplaced X-rays in hospital systems cause diagnostic
+        errors and delays. Manual review of thousands of images is not feasible.
 
         **Solution:** Automated misplacement detection using unsupervised ML —
         no labeled training data required.
