@@ -1,9 +1,10 @@
-pandas
-numpy
+opencv-python-headless
+scikit-learn
+umap-learn
 matplotlib
 seaborn
-scikit-learn
-xgboost
-shap
-streamlit
 plotly
+streamlit
+pandas
+numpy
+Pillow
